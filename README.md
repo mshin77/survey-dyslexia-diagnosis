@@ -1,1 +1,1 @@
-Denton, K., Coneway, B., Simmons, M., Behl, M., & Shin, M. (2022). Parents' voices matter: A mixed‐method study on the dyslexia diagnosis process. * Psychology in the Schools, 5*9(11), 2267-2286.  https://doi.org/10.1002/pits.22762
+Denton, K., Coneway, B., Simmons, M., Behl, M., & Shin, M. (2022). Parents' voices matter: A mixed‐method study on the dyslexia diagnosis process. *Psychology in the Schools, 5*9(11), 2267-2286.  https://doi.org/10.1002/pits.22762
