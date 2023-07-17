@@ -1,0 +1,262 @@
+---
+title: 'Parents Voices Matter: A Mixed-Method Study on the Dyslexia Diagnosis Process'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(cache = TRUE, warning = FALSE,
+                      message = FALSE, echo = TRUE, dpi = 180,
+                      fig.width = 8, fig.height = 5)
+```
+
+# Private data have been removed in this copy of R codes.
+
+```{r}
+library(stringr)
+
+Q49 <- dp_tbl_text %>% 
+    select(id, state, Q49_text) %>%
+    filter(str_detect(Q49_text, "")) %>%
+    mutate(participant = row_number())
+
+Q51 <- dp_tbl_text %>% 
+    select(id, state, Q51_text) %>%
+    filter(str_detect(Q51_text, ""))
+
+Q53 <- dp_tbl_text %>% 
+    select(id, state, Q53_text) %>%
+    filter(str_detect(Q53_text, ""))
+
+Q55 <- dp_tbl_text %>% 
+    select(id, state, Q55_text) %>%
+    filter(str_detect(Q55_text, ""))
+
+Q57 <- dp_tbl_text %>% 
+    select(id, state, Q57_text) %>%
+    filter(str_detect(Q57_text, ""))
+
+Q78 <- dp_tbl_text %>% 
+    select(id, state, Q78_text) %>%
+    filter(str_detect(Q78_text, ""))
+```
+
+
+```{r}
+library(tidyr)
+library(stringr)
+
+united_tbl <- dp_tbl_text %>% 
+    unite(united_texts, Q49_text, Q51_text, Q53_text, Q55_text, Q57_text, Q78_text, sep = "", remove = TRUE)
+```
+
+
+```{r}
+united_tbl_clean <- united_tbl %>%
+    select(id, state, united_texts) %>%
+    filter(str_detect(united_texts, "")) %>%
+    mutate(participant = row_number())
+
+write.csv(united_tbl_clean, "../data/united_tbl_clean.csv")
+```
+
+
+```{r}
+library(stringr)
+
+united_tbl_clean_tk <- united_tbl_clean
+
+united_tbl_clean_tk$united_texts <- united_tbl_clean$united_texts  %>% 
+    str_extract_all(pattern = "[[:alpha:]']+-?[[:alpha:]']+|[:alpha:]{1}") %>%
+    str_to_lower()
+```
+
+
+```{r}
+library(quanteda)
+library(textminingR)
+process.data <- united_tbl_clean_tk %>% 
+    preprocess_texts(text_field = "united_texts", remove_hyphens = FALSE) %>%  
+    tokens_wordstem() %>%
+    tokens_select(min_nchar=3L,
+                  verbose = TRUE)
+```
+
+```{r}
+library(quanteda)
+dfm_output <- dfm(process.data)
+dfm_output@docvars$document <- dfm_output@docvars$docname_
+```
+
+
+```{r}
+library(tidytext)
+dfm_td_init <- tidy(dfm_output) 
+dfm_td <- dfm_td_init %>% left_join(dfm_output@docvars, "document")  
+dfm_td
+```
+
+```{r}
+dfm_td$word <- dfm_td$term
+```
+
+
+# Term frequency-inverse document frequency (tf-idf) of participants' responses
+```{r}
+dfm_td_tf_idf <- dfm_td %>% 
+  bind_tf_idf(word, participant, count)
+dfm_td_tf_idf
+```
+
+# Positive and negative words 
+```{r}
+word_counts_sentiments <- dfm_td_tf_idf %>%
+    inner_join(get_sentiments("bing")) 
+
+word_counts_sentiments_selected <- word_counts_sentiments %>% 
+    dplyr::select(document, participant, id, state, word, count, sentiment, tf, idf, tf_idf)
+word_counts_sentiments_selected
+```
+
+```{r}
+word_tf_idf <- word_counts_sentiments_selected %>%
+    count(word, sentiment, tf_idf, sort = TRUE) %>%
+    ungroup()
+
+word_tf_idf
+```
+
+```{r}
+library(ggplot2)
+sliced_sentiment <- word_tf_idf %>%
+    filter(sentiment == "negative" & tf_idf >= 0.3 | sentiment == "positive" & tf_idf >= 0.3) %>%
+    arrange(desc(tf_idf), word) %>%
+    group_by(sentiment) %>%
+    ungroup() 
+
+sliced_sentiment$word <- as.factor(sliced_sentiment$word)
+sliced_sentiment$sentiment <- as.factor(sliced_sentiment$sentiment)
+sliced_sentiment
+```
+
+```{r}
+library(forcats)
+library(tidytext)
+
+sliced_sentiment_group_by <- sliced_sentiment %>%
+    ungroup()%>%
+    group_by(word,sentiment,n)%>%
+    summarise(tf_idf=sum(tf_idf), .groups = 'drop') %>% 
+    ungroup() 
+
+sliced_sentiment_group_by
+```
+
+```{r}
+plot_sentiment <-  sliced_sentiment_group_by %>%
+    mutate(word=as.character(word), word=reorder_within(word,tf_idf, sentiment)) %>%
+    ggplot(aes(x = tf_idf, y = word, fill = sentiment)) +
+    scale_fill_manual(values=c("#B5B7BB", "#757575")) +
+    geom_col(show.legend = FALSE)+
+    facet_wrap(~ sentiment, scales = "free") +
+    scale_y_reordered()+
+    labs(x = "tf-idf",
+         y = NULL,
+         size = 11) +
+    theme_minimal(base_size = 11) +
+    theme(
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "#3B3B3B", size = 0.3),
+        axis.ticks = element_line(color = "#3B3B3B", size = 0.3),
+        strip.text.x = element_text(size = 11, color = "#3B3B3B"), 
+        axis.text.x = element_text(size = 11, color = "#3B3B3B"),
+        axis.text.y = element_text(size = 11, color = "#3B3B3B"),
+        axis.title = element_text(size = 11, color = "#3B3B3B"),
+        axis.title.x = element_text(margin = margin(t = 9)),
+        axis.title.y = element_text(margin = margin(r = 9))) 
+
+plot_sentiment
+```
+
+
+```{r}
+library(widyr)
+word_neg <- dfm_td %>%
+    inner_join(get_sentiments("bing")) %>%
+    filter(sentiment == "negative") %>%
+    pairwise_count(word, participant, sort = TRUE, upper = FALSE) %>%
+    tibble() %>% 
+    ungroup()
+    
+word_neg$item1<- dplyr::case_when(
+    
+    word_neg$item1 == "sever" ~ "sever(ity)",
+
+    TRUE ~ as.character(word_neg$item1)
+)
+
+word_neg$item2<- dplyr::case_when(
+    
+    word_neg$item2 == "sever" ~ "sever(ity)",
+
+    TRUE ~ as.character(word_neg$item2)
+)
+
+word_neg
+```
+
+```{r}
+library(igraph)
+library(ggraph)
+
+set.seed(1234)
+plot_cor_neg <- word_neg %>%
+    filter(n >= 2) %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "#979797") +
+    geom_node_point(size = 1.5) +
+    geom_node_text(aes(label = name), 
+                   size = 5,
+                   repel = TRUE, 
+                   point.padding = unit(0.2, "lines")) +
+    theme_void(base_size = 13) +
+    theme(legend.text=element_text(size = 13),
+          legend.title = element_text(size = 13, margin = margin(b = 5), color = "#3B3B3B")) 
+    
+    
+plot_cor_neg
+```
+```{r}
+word_pos <- dfm_td %>%
+    inner_join(get_sentiments("bing")) %>%
+    filter(sentiment == "positive") %>%
+    pairwise_count(word, participant, sort = TRUE, upper = FALSE) %>%
+    ungroup()
+    
+word_pos 
+```
+```{r}
+set.seed(1234)
+plot_cor_pos <- word_pos %>%
+    filter(n >= 2) %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n, 
+                       edge_width = n), 
+                   edge_colour = "#979797") +
+    geom_node_point(size = 1.5) +
+    geom_node_text(aes(label = name), 
+                   size = 5,
+                   repel = TRUE, 
+                   point.padding = unit(0.2, "lines")) +
+    theme_void(base_size = 13) +
+    theme(legend.text=element_text(size = 13),
+          legend.title = element_text(size = 13, margin = margin(b = 5), color = "#3B3B3B"))
+    
+plot_cor_pos
+
+```
